@@ -17,6 +17,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -45,17 +47,18 @@ class FeedViewModelTest {
     }
     
     @Test
-    fun `initial state is Success`() = runTest {
+    fun `initial state has no snackbar message`() = runTest {
         viewModel = FeedViewModel(getPostsUseCase, toggleLikeUseCase)
         
         viewModel.uiState.test {
             val state = awaitItem()
-            assertEquals(FeedUiState.Success, state)
+            assertNull(state.snackbarMessage)
+            assertNotNull(viewModel.postsFlow)
         }
     }
     
     @Test
-    fun `toggleLike calls use case with correct postId`() = runTest {
+    fun `toggleLike success calls use case with correct postId`() = runTest {
         val postId = "post_123"
         val mockPost = Post(
             id = postId,
@@ -71,14 +74,23 @@ class FeedViewModelTest {
         
         viewModel = FeedViewModel(getPostsUseCase, toggleLikeUseCase)
         
-        viewModel.toggleLike(postId)
-        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.uiState.test {
+            // Initial state
+            val initialState = awaitItem()
+            assertNull(initialState.snackbarMessage)
+            
+            viewModel.toggleLike(postId)
+            testDispatcher.scheduler.advanceUntilIdle()
+            
+            // State should not change on success (no snackbar)
+            expectNoEvents()
+        }
         
         coVerify { toggleLikeUseCase.invoke(postId) }
     }
     
     @Test
-    fun `toggleLike failure shows error state`() = runTest {
+    fun `toggleLike failure shows snackbar message`() = runTest {
         val postId = "post_123"
         val errorMessage = "Failed to toggle like"
         
@@ -87,20 +99,44 @@ class FeedViewModelTest {
         viewModel = FeedViewModel(getPostsUseCase, toggleLikeUseCase)
         
         viewModel.uiState.test {
-            // Skip initial Success state
-            assertEquals(FeedUiState.Success, awaitItem())
+            // Initial state
+            assertNull(awaitItem().snackbarMessage)
             
             viewModel.toggleLike(postId)
             testDispatcher.scheduler.advanceUntilIdle()
             
-            // Should show error
+            // Should show snackbar message
             val errorState = awaitItem()
-            assert(errorState is FeedUiState.Error)
-            assertEquals(errorMessage, (errorState as FeedUiState.Error).message)
+            assertEquals(errorMessage, errorState.snackbarMessage)
+        }
+    }
+    
+    @Test
+    fun `snackbarMessageShown clears the message`() = runTest {
+        val postId = "post_123"
+        
+        coEvery { toggleLikeUseCase.invoke(postId) } returns Result.failure(Exception("Error"))
+        
+        viewModel = FeedViewModel(getPostsUseCase, toggleLikeUseCase)
+        
+        viewModel.uiState.test {
+            // Initial state
+            assertNull(awaitItem().snackbarMessage)
             
-            // Should reset to success
-            val successState = awaitItem()
-            assertEquals(FeedUiState.Success, successState)
+            // Trigger error
+            viewModel.toggleLike(postId)
+            testDispatcher.scheduler.advanceUntilIdle()
+            
+            // Error state
+            val errorState = awaitItem()
+            assertNotNull(errorState.snackbarMessage)
+            
+            // Clear message
+            viewModel.snackbarMessageShown()
+            
+            // Message should be cleared
+            val clearedState = awaitItem()
+            assertNull(clearedState.snackbarMessage)
         }
     }
 }

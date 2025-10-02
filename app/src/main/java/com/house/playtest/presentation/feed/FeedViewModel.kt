@@ -12,37 +12,42 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class FeedViewModel @Inject constructor(
-    private val getPostsUseCase: GetPostsUseCase,
+    getPostsUseCase: GetPostsUseCase,
     private val toggleLikeUseCase: ToggleLikeUseCase
 ) : ViewModel() {
     
-    private val _uiState = MutableStateFlow<FeedUiState>(FeedUiState.Loading)
-    val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
-    
+    // Paging 3 handles the post list state (loading, error, data)
     val postsFlow: Flow<PagingData<Post>> = getPostsUseCase()
         .cachedIn(viewModelScope)
     
-    init {
-        _uiState.value = FeedUiState.Success
-    }
+    // UI state handles screen-level state (snackbars, filters, etc.)
+    private val _uiState = MutableStateFlow(FeedUiState())
+    val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
     
     fun toggleLike(postId: String) {
         viewModelScope.launch {
             toggleLikeUseCase(postId)
-                .onSuccess {
-                    // Paging 3 will automatically refresh the data
-                }
                 .onFailure { error ->
-                    _uiState.value = FeedUiState.Error(error.message ?: "Failed to toggle like")
-                    // Reset to success after showing error
-                    _uiState.value = FeedUiState.Success
+                    _uiState.update { 
+                        it.copy(snackbarMessage = error.message ?: "Failed to toggle like")
+                    }
                 }
         }
     }
+    
+    fun snackbarMessageShown() {
+        _uiState.update { it.copy(snackbarMessage = null) }
+    }
+    
+    // Future functions can be easily added:
+    // fun applyFilter(filter: FilterType) { ... }
+    // fun updateSearchQuery(query: String) { ... }
+    // fun changeSortOrder(order: SortOrder) { ... }
 }
 

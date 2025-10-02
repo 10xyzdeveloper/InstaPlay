@@ -20,14 +20,28 @@ fun FeedScreen(
     onPostClick: (String) -> Unit,
     viewModel: FeedViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val posts = viewModel.postsFlow.collectAsLazyPagingItems()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Feed") }
             )
+        },
+        snackbarHost = {
+            // Show snackbar for like errors
+            uiState.snackbarMessage?.let { message ->
+                Snackbar(
+                    action = {
+                        TextButton(onClick = { viewModel.snackbarMessageShown() }) {
+                            Text("Dismiss")
+                        }
+                    }
+                ) {
+                    Text(message)
+                }
+            }
         }
     ) { paddingValues ->
         Box(
@@ -93,17 +107,6 @@ fun FeedScreen(
                     Button(onClick = { posts.retry() }) {
                         Text("Retry")
                     }
-                }
-            }
-            
-            // Show error snackbar for like errors
-            if (uiState is FeedUiState.Error) {
-                Snackbar(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp)
-                ) {
-                    Text((uiState as FeedUiState.Error).message)
                 }
             }
         }
