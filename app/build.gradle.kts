@@ -47,6 +47,19 @@ kapt {
     correctErrorTypes = true
 }
 
+hilt {
+    enableAggregatingTask = false
+}
+
+subprojects {
+    configurations.all {
+        resolutionStrategy {
+            // force the version expected by Hilt processor
+            force("com.squareup:javapoet:1.13.0")
+        }
+    }
+}
+
 
 
 dependencies {
